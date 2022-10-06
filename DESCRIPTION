@@ -1,0 +1,21 @@
+Package: pickupanalysis
+Title: Uber Pickup Analysis for Bengaluru City
+Version: 0.0.0.9000
+Authors@R: person("Suriyah", "Dhinakaran", email = "sdhinaka@uni-muenster.de",
+                  role = c("aut", "cre"))
+Description: The vignette file of this package provides trip analysis visualisation plots using ggplot2.
+License: GPL-3
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.1
+Depends: R (>= 2.10)
+LazyData: true
+LazyDataCompression: xz
+Suggests: knitr, rmarkdown
+VignetteBuilder: knitr
+Imports: ggplot2, sf, jsonlite, tidyverse, dplyr, tidyr, ggthemes,
+        lubridate, DT, scales, mapview, ggpubr, viridis, lwgeom
+NeedsCompilation: no
+Packaged: 2022-09-06 08:18:03 UTC; Suriyah Dhinakaran
+Author: Suriyah Dhinakaran [aut, cre]
+Maintainer: Suriyah Dhinakaran <sdhinaka@uni-muenster.de>

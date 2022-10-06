@@ -1,0 +1,515 @@
+---
+title: "Uber Pickup Analysis of Bengaluru City"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Uber Pickup Analysis of Bengaluru City}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  fig.width = 7, fig.height = 5,
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(pickupanalysis)
+```
+
+### Introduction
+
+The goal of this project is to learn ggplot2 visualisation for a spatial dataset and to deliver basic analytics for the same using R language. The motivation for working with this project is to get a holistic understanding of the usage of R language in analytics domain and also to develop a familiarity with ggplot2 visualisations. Analysing Uber's pickup data for Bengaluru City using plots and maps provide a better understanding of the large dataset, compared to viewing data in the dataframe. 
+
+### Dataset Description
+
+Two datasets are available with this package:-
+
+1. "boundaries" : This dataset that contains the names and geometry of areas in Bangalore City dataset. This dataset is downloaded from the uber movement dataset that is available online. The dataset is slightly modified to remove redundant columns. 
+Source: movement.uber.com
+
+2. "date_hour" : This dataset provides the number of trips for the first quarter of 2020 for the city Bengaluru, India. This dataset is slightly modified for the purpose of effective storage into this package.
+
+
+### Package dependencies for this package "pickupanalysis"
+
+```{r}
+
+library(jsonlite)   #Simple and fast json parser and generator for R
+library(sf)    #Support for simple features, a standardized way to encode spatial vector data
+library(tidyverse)   #collection of open source packages for the R programming language
+library(dplyr)    #prominant data manipulation library
+library(tidyr)    #tidies messy data
+library(ggplot2)    #provides support for plots and visualisation
+library(ggthemes)    #provides themes for ggplots
+library(lubridate)   #helps wrangling with date, time format
+library(DT)     #helps project dataframes as html friendly datatables
+library(scales)    #automatically determines aesthetics for plots and maps
+library(mapview)    #provides create interactive visualisations of spatial data
+library(ggpubr)    #To create publication ready plots
+library(viridis)    #provides color scales for ggplots
+
+```
+
+#### Loads the boundaries dataset and builds additional columns into the dataset for analysis purpose.
+
+```{r}
+
+data(boundaries)
+sf::sf_use_s2(FALSE) #Handles spherical geometry error
+boundaries$centroid <- st_centroid(boundaries$geometry)
+dim(boundaries)
+
+```
+
+#### Mapview Bangalore boundaries dataset.
+
+```{r}
+
+mapview(boundaries)
+
+```
+
+#### Convert centroid sf object to lat and long into the boundaries dataset.
+
+```{r}
+
+lat_long_centroid <- boundaries$centroid
+class(lat_long_centroid)
+lat_long_mat <- st_coordinates(lat_long_centroid)
+lat_long_tab <- as.data.frame(lat_long_mat)
+boundaries$long <- lat_long_tab[,1]
+boundaries$lat <- lat_long_tab[,2]
+head(boundaries)
+
+```
+
+#### Dataset acquiring from our package.
+
+```{r}
+data(date_hour)
+head(date_hour)
+```
+
+#### Data wrangling for the purpose of user friendly purpose for our analysis. By looking at the dataset, the trips are categorised into five hourslot classes. To best understand it, the hour slots are converted into human readable hour slots. 
+
+```{r}
+date_hour$hour_add <- rowSums(date_hour[, c("start_hour", "end_hour")])
+s <- unique(sort(date_hour$hour_add))
+date_hour$Hour_slots <- as.factor(ifelse(date_hour$hour_add == s[1], 'Midnight to Early Morning',
+                     ifelse(date_hour$hour_add == s[2], 'Morning Peak',
+                     ifelse(date_hour$hour_add == s[3], 'After sunset',
+                     ifelse(date_hour$hour_add == s[4], 'Mid-Day', 'Evening Peak')))))
+date_hour$Hour_slots <- factor(date_hour$Hour_slots, levels=c("Midnight to Early Morning", "Morning Peak", "Mid-Day", "Evening Peak", "After sunset"))
+```
+
+#### Converting the day and month names human readable.
+
+```{r}
+m <- unique(sort(date_hour$month))
+date_hour$month_names <- as.ordered(ifelse(date_hour$month == m[1], 'January',
+                                   ifelse(date_hour$month == m[2], 'Febraury', 'March')))
+date_hour$month_names <- factor(date_hour$month_names, levels=c("January", "Febraury", "March"))
+date_hour$year <- as.numeric(2022)
+date_hour$date_format <-as.Date(with(date_hour,paste(year,month,day,sep="-")),"%Y-%m-%d")
+date_hour$day_of_week <- factor(wday(date_hour$date_format, label=TRUE))
+date_hour <- date_hour[complete.cases(date_hour), ]
+dim(date_hour)
+head(date_hour)
+
+```
+
+#### Splitting the dataset into three months of the first quarter.
+
+```{r}
+
+jan_ban <- date_hour[date_hour$month == 1, ]
+feb_ban <- date_hour[date_hour$month == 2, ]
+mar_ban <- date_hour[date_hour$month ==3, ]
+
+str(jan_ban)
+```
+
+#### Plotting the number of trips for each months by day of the month.
+
+```{r, fig.cap= "Plot1: Total number of trips for each months in the first quarter"}
+daily_data_jan <- jan_ban %>% group_by(day) %>% dplyr::summarize(Total = n())
+jan <- ggplot(daily_data_jan, aes(day, Total)) + 
+geom_bar(stat="identity", 
+         fill="steelblue", 
+         color="red") + 
+ggtitle("Trips Every Day in January", subtitle = "January days") + 
+theme(legend.position = "none", 
+      plot.title = element_text(hjust = 0.5), 
+      plot.subtitle = element_text(hjust = 0.5)) + 
+scale_y_continuous(labels=comma)
+
+daily_data_feb <- feb_ban %>% group_by(day) %>% dplyr::summarize(Total = n())
+
+feb <- ggplot(daily_data_feb, aes(day, Total)) + 
+geom_bar(stat="identity", 
+         fill="steelblue", 
+         color="red") + 
+ggtitle("Trips Every Day in Febraury", subtitle = "Febraury Days") + 
+theme(legend.position = "none", 
+      plot.title = element_text(hjust = 0.5), 
+      plot.subtitle = element_text(hjust = 0.5)) + 
+scale_y_continuous(labels=comma)
+
+daily_data_mar <- mar_ban %>% group_by(day) %>% dplyr::summarize(Total = n())
+
+mar <- ggplot(daily_data_mar, aes(day, Total)) + 
+geom_bar(stat="identity", 
+         fill="steelblue", 
+         color="red") + 
+ggtitle("Trips Every Day in March", subtitle = "March Days") + 
+theme(legend.position = "none", 
+      plot.title = element_text(hjust = 0.5), 
+      plot.subtitle = element_text(hjust = 0.5)) + 
+scale_y_continuous(labels=comma)
+
+ggarrange(jan, feb, mar + rremove("x.text"), 
+          ncol = 2, nrow = 2)
+
+```
+
+
+#### Total trips by hour slots and months.
+
+```{r, fig.cap= "Plot 2: Total number of trips by hourslots and months"}
+doubleplot <- date_hour %>% group_by(month_names, Hour_slots) %>%  dplyr::summarize(Total = n())
+
+ggplot(doubleplot, aes(Hour_slots, Total, fill=month_names)) + 
+geom_bar(stat = "identity") + 
+ggtitle("Trips by Hour Slots and Months") + 
+scale_y_continuous(labels = comma)
+
+```
+
+#### Data table that shows correlation between day of the month and hour slots
+
+```{r, fig.cap= "Data table that shows correlation between day of the month and hour slots"}
+day_hour <- date_hour %>% group_by(day, Hour_slots) %>% dplyr::summarize(Total = n())
+datatable(day_hour)
+```
+
+#### Heat Map by hourslots and day of month
+
+```{r, fig.cap= "Plot 3: Heat Map by hourslots and day of month"}
+ggplot(day_hour, aes(day, Hour_slots, fill = Total)) + 
+geom_tile(color = "white") + 
+ggtitle("Heat Map by Hour and Day")
+
+```
+
+#### Total number of trips by month
+
+```{r, fig.cap="Plot 4: Total number of trips by month"}
+
+month_levels <- date_hour %>% group_by(month_names) %>% dplyr::summarize(Total = n())
+
+ggplot(month_levels, aes(month_names, Total, fill = month_names)) + 
+geom_bar(stat = "Identity") + 
+ggtitle("Trips in a month") + 
+theme(legend.position = "none") + 
+scale_y_continuous(labels = comma)
+
+```
+
+#### Total number of trips by day of week and month
+
+```{r, fig.cap="Plot 5: Total number of trips by day of week and month"}
+
+day_month_data <- date_hour %>% group_by(day_of_week, month_names) %>% dplyr::summarize(Trips = n())
+ggplot(day_month_data, aes(day_of_week, month_names, fill = Trips)) + 
+geom_tile(color = "white") + 
+ggtitle("Heat Map by Month and Day")
+
+```
+
+#### Trips by day of week and month.
+
+```{r, fig.cap="Plot 6: Trips by day of week and month"}
+
+ggplot(day_month_data, aes(day_of_week, Trips, fill = month_names)) + 
+geom_bar(stat = "identity", aes(fill = month_names), position = "dodge") + 
+ggtitle("Trips by Day and Month") + 
+scale_y_continuous(labels = comma) +
+coord_cartesian(ylim=c(150000,500000))
+
+```
+
+#### Distribution of trips by day of the week.
+
+```{r, fig.cap="Plot 7: Distribution of trips by day of the week"}
+
+ggplot(day_month_data, aes(day_of_week, Trips, fill = day_of_week)) + 
+  geom_boxplot() +
+  scale_y_log10() +
+  ggtitle("Distribution of Trips by Weekday") +
+  theme(legend.position = "top") +
+  coord_flip()
+
+```
+
+#### Understanding the nature of dataset by viewing the head of it.
+
+```{r}
+head(date_hour)
+```
+
+#### Data Wrangling for further analysis
+
+```{r}
+
+boundaries$MOVEMENT_ID <- as.integer(boundaries$MOVEMENT_ID)
+
+date_hour <- left_join(date_hour, boundaries %>% dplyr::select(WARD_NAME, MOVEMENT_ID), by = c('sourceid' = 'MOVEMENT_ID'))
+
+date_hour <- date_hour %>% rename(pickup_area = WARD_NAME)
+
+date_hour <- left_join(date_hour, boundaries %>% dplyr::select(WARD_NAME, MOVEMENT_ID), by = c('dstid' = 'MOVEMENT_ID'))
+
+date_hour <- date_hour %>% rename(drop_area = WARD_NAME)
+
+```
+
+#### Extracting the Total number trips from different pickup areas of Bangalore
+
+```{r}
+
+wardname_pickups <- date_hour %>% 
+    group_by(pickup_area) %>% 
+    tally() %>% 
+    arrange(desc(n))
+datatable(wardname_pickups)
+
+```
+
+#### Extracting information from dataset in the form of datatable by grouping month, pickup area and month names and day of month
+
+```{r}
+
+by_month_ward_name <- date_hour %>% 
+    group_by(month, pickup_area, month_names, day) %>% 
+    tally() %>% 
+    arrange(pickup_area, month)
+datatable(by_month_ward_name)
+
+```
+
+#### Extracting day of week and pickup area.
+
+```{r}
+
+ward_by_wkday <-  date_hour%>% 
+    group_by(day_of_week, pickup_area) %>%
+    tally() %>% 
+    arrange(pickup_area, day_of_week)
+datatable(ward_by_wkday)
+
+```
+
+#### Extracting day of week, pickup area and hour slots from the dataset.
+
+```{r}
+
+wkday_ward_hslots <- date_hour %>% 
+    group_by(day_of_week, pickup_area, Hour_slots) %>%
+    tally() %>% 
+    arrange(pickup_area, Hour_slots , day_of_week)
+datatable(wkday_ward_hslots)
+
+```
+
+#### Plotting Uber Pickup Trend over the three months span from Subhash Nagar, Kadugodi, Begur, Kempegowda Ward, Kengeri and Koramangala.
+
+```{r, fig.cap="Plot 8: Uber Pickup Trend for five wards in Bengaluru"}
+
+plot_usage_growth <- by_month_ward_name %>% 
+    filter(pickup_area %in% c("Subhash Nagar","Kadugodi","Begur","Kempegowda Ward", "Kengeri", "Koramangala")) %>%
+    mutate(Date = paste(day, month, "2022", sep = "-")) %>% 
+    mutate(Date = dmy(Date)) %>% 
+    ggplot(aes(Date, n, colour = pickup_area)) + 
+    geom_line() +
+    theme_bw() +
+    ggtitle("Uber Pick-Ups Growth")
+plot_usage_growth    
+
+```
+
+#### Uber pickups by day of week, pickup_area and hour slots from Subhash Nagar, Kadugodi, Begur, Kempegowda Ward, Kengeri and Koramangala.
+
+```{r, fig.cap="Plot 9: Uber pickups by week, slots and pickup area from five wards in Bengaluru"}
+
+plot_all_pickup <- wkday_ward_hslots %>% 
+    filter(pickup_area %in% c("Subhash Nagar","Kadugodi","Begur","Kempegowda Ward", "Kengeri", "Koramangala")) %>% 
+    ggplot(aes(day_of_week, Hour_slots)) +
+    geom_point(aes(size = n, colour = n)) + 
+    theme_bw() +
+    theme(legend.position = "none") +
+    ggtitle("Pick-ups by Day, Time and Pickup Area") +
+    ylab("Time") +
+    facet_grid(pickup_area ~ .) +
+    scale_colour_gradient(low = "lightsteelblue", high= "midnightblue")
+plot_all_pickup
+
+```
+
+#### Pickups by day of week, hourslots from Koramangala.
+
+```{r, fig.cap="Plot 10: Pickups by day of week, hourslots from Koramangala"}
+
+plot_Koramangala <- wkday_ward_hslots %>% 
+    filter(pickup_area %in% c("Koramangala")) %>% 
+    ggplot(aes(day_of_week, Hour_slots)) +
+    geom_point(aes(size = n, colour = n)) + 
+    theme_bw() +
+    theme(legend.position = "none") +
+    ggtitle("Pick-ups by Day, Time in Koramangala") +
+    ylab("Time") +
+    scale_colour_gradient(low = "lightsteelblue", high= "midnightblue")
+plot_Koramangala
+
+```
+
+#### Uber pickups heatmap by day of week and hour slots from Koramangala region.
+
+```{r, fig.cap="Plot 11:  Heatmap by day of week and hour slots from Koramangala region"}
+
+heatmap_Koramangala <- wkday_ward_hslots  %>% 
+    filter(pickup_area %in% c("Koramangala")) %>%
+    ggplot(aes(day_of_week, Hour_slots, fill = n/3)) +
+    geom_tile(color="white", size=0.1) +
+    scale_fill_viridis(name="# Events/hour") +
+    coord_equal() +
+    labs(x=NULL, y= "Time", title="Pick-Ups per weekday & time of day in Koramangala") 
+heatmap_Koramangala
+
+```
+
+#### Generating similar heatmap with other areas namely, Kadugodi, Begur along with Koramangala.
+
+```{r, fig.cap="Plot 12: Similar heatmap with other areas namely, Kadugodi, Begur along with Koramangala"}
+
+heatmap_other_pickuparea <- wkday_ward_hslots  %>% 
+    filter(pickup_area %in% c("Kadugodi","Begur", "Koramangala")) %>% 
+    ggplot(aes(day_of_week, Hour_slots, fill = n/3)) +
+    geom_tile(color="white", size=0.1) +
+    scale_fill_viridis(name="# Events/hour") +
+    coord_equal() +
+    labs(x=NULL, y= "Time", title="Pick-Ups per weekday & time of day other pick-up area") +
+    facet_grid(. ~ pickup_area)
+heatmap_other_pickuparea
+
+```
+
+
+#### Centroids of polygon boundaries to understand the nature of city.
+
+```{r, fig.cap="Plot 13: Centroid of the city"}
+
+a <- ggplot(boundaries, aes(x = long, y = lat)) + 
+  geom_point() + 
+  coord_equal() + 
+  xlab('Longitude') + 
+  ylab('Latitude')
+
+b <- ggplot(boundaries, aes(x = long, y = lat)) + 
+  coord_equal() + 
+  xlab('Longitude') + 
+  ylab('Latitude') + 
+  stat_density2d(aes(fill = ..level..), alpha = .5,
+                 geom = "polygon", data = boundaries) + 
+  scale_fill_viridis_c() + 
+  theme(legend.position = 'none')
+
+ggarrange(a, b + rremove("x.text"), 
+          ncol = 2, nrow = 1)
+
+```
+
+#### Creating a dataset boundaries_geom only with the geometry and movement_id for ease of referencing. Applying st_union on the bangalore boundaries dataset for better displying of the the bangalore are holistically under the plot. Creating a subset of boundaries dataset for further plotting.
+
+```{r}
+
+boundaries_geom <- boundaries %>% dplyr::select(MOVEMENT_ID, geometry)
+bangalore_union <- st_union(boundaries_geom)
+boundaries_geom_p <- boundaries %>% dplyr::select(MOVEMENT_ID, long, lat, WARD_NAME)
+
+```
+
+
+#### Mapping the total number of pickups with the wardname for the first three months.
+
+```{r, fig.cap="Plot 14: Total number of pickups with the wardname for the first three months"}
+
+wardname_pickups_map <- date_hour %>% 
+    group_by(pickup_area, sourceid) %>% 
+    tally() %>% 
+    arrange(desc(n))
+datatable(wardname_pickups_map)
+wardname_pickups_map <- as.data.frame(wardname_pickups_map)
+wardname_pickups_map <- wardname_pickups_map %>% rename(Total_Pickups = n)
+wardname_pickups_map <- merge(x=wardname_pickups_map, y=boundaries_geom, by.x='sourceid', by.y='MOVEMENT_ID')
+wardname_pickups_map <- st_as_sf(wardname_pickups_map)
+mapviewOptions(fgb = FALSE)
+wardname_pickups_map %>% mapview(zcol = "Total_Pickups", legend = TRUE, col.regions = sf.colors)
+wardname_pickups_map %>%
+    select(Total_Pickups) %>%
+    plot(graticule = TRUE, axes = TRUE)
+
+```
+
+#### Bubble Plots for the number of pickups in the first quarter of 2020 in Bengaluru City.
+
+```{r, fig.cap="Plot 15: Bubble Plots for the number of pickups in the first quarter of 2020"}
+
+ggplot() +
+  geom_sf(data = bangalore_union, fill="grey", alpha=0.3) +
+  geom_point(data=boundaries_geom_p, aes(x=long, y=lat, size=wardname_pickups_map$Total_Pickups, color=wardname_pickups_map$Total_Pickups)) +
+  scale_size_continuous(range=c(1,12)) +
+  scale_color_viridis(trans="log") +
+  theme_void()+ coord_sf(xlim = c(77.45, 77.80), ylim = c(12.80, 13.15), expand = FALSE)
+
+```
+
+
+### Observation and Analysis from the above plots:-
+
+Plot 1: Although definitive pattern is not observed with this plot, total number of trips by day in March shows a significant decline. This can be attributed to the first instance of covid19 situation in Bengaluru. It can also be observed that, there have been uber trips even after the declaration of Nationwide lockdown, although drastically reduced from normal.
+
+Plot 2: Bar plot provides a clear idea that the demand for uber cars and autos is higher in the mid-day hours compared to the morning peak(7AM - 10AM) and evening peak hours(4PM - 7PM). To my surprise, there is also significant amount of demand in the midnight to early morning hour slots. Given the number of hours for each slots, highest demand for uber is spotted at the late after sunset, compared to evening and morning peak hours.
+
+Plot 3: In general, there is a high demand in the mid day hours all through the three months
+
+Plot 4: Total Trips by month plot shows clear decline in the number of trips over three months, this can be partly attributed to the covid situation.
+
+Plot 5: On examining the heat map, although by general trend, highest demand is seen in the weekend. There is also equally similar demands in Mondays for the three months
+
+Plot 6: On viewing this plot, different picture emerges. Month of February and March shows high demand during Wednesday compared to the weekends and Mondays.
+
+Plot 7: In this plot, Mondays show the highest of bandwidths of demand compared to the even the weekends
+
+Plot 8: Trendlines provides demand by ward names over the three months. Subhash Nagar shows highest demand, Kadugodi shows the lowest demand. This code snippet can be used to find the trendlines for any location in Bengaluru. Drastic decline is spotted towards the end of March.
+
+Plot 9: This plot, provides demand by hour slots and day of week for six wards in Bengaluru. Subhash Nagar shows demand in all segments, whereas Kadugodi shows low demand in all segments and also shows general trend as exhibited in other plots.
+
+Plot 10: This plot exhibits demand in Koramangala area in Bengaluru. This plot provides clear picture of uber pickup demand. Generally increasing demand is observed, peaking after sunset in all days. Lowest demand is found over the Early mornings of Fridays, this observation is significant as the lowest demand is not over the mid days of the week, but on Fridays.
+
+Plot 11: This plot shows correspondence to the previous plot
+
+Plot 12: Provides visible changes in the demand on comparison of Koramangala's demand with others.
+
+Plot 13: Provides a brief idea of concentration of wards in the Bengaluru city
+
+Plot 14: Provides map of demands of uber for three months of 2020 in Bengaluru. This map provides a nice idea of the demands by wards in Bengaluru.
+
+Plot 15: This bubble plot provides the concentration of demand in and around the Bengaluru city.
+
+
+### Conclusion:-
+
+These plots provides insights on demands in Bengalure City. To my surprise, different type of plots from the same dataset provides different insights. Although the scope of analysis is less as the dataset is only for the first quarter of 2020, this project can be a good starting point for larger analysis. Each and every plots can be scaled up for better insights. 
